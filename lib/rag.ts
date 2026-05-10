@@ -1,4 +1,4 @@
-import { JinaEmbeddings } from "@langchain/community/embeddings/jina";
+import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { QdrantVectorStore } from "@langchain/qdrant";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { Document } from "@langchain/core/documents";
@@ -10,9 +10,9 @@ const QDRANT_URL = process.env.QDRANT_URL || "http://localhost:6333";
 const QDRANT_API_KEY = process.env.QDRANT_API_KEY;
 
 export function getEmbeddings() {
-  return new JinaEmbeddings({
-    apiKey: process.env.JINA_API_KEY,
-    model: "jina-embeddings-v3",
+  return new GoogleGenerativeAIEmbeddings({
+    apiKey: process.env.GEMINI_API_KEY,
+    model: "gemini-embedding-001",
   });
 }
 

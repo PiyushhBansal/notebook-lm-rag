@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import OpenAI from "openai";
+import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { retrieveChunks } from "@/lib/rag";
 
 export const runtime = "nodejs";
@@ -30,19 +30,20 @@ export async function POST(req: NextRequest) {
       })
       .join("\n\n---\n\n");
 
-    const client = new OpenAI({
-      apiKey: process.env.GROK_API_KEY,
-      baseURL: "https://api.x.ai/v1",
-    });
-    const response = await client.chat.completions.create({
-      model: "grok-2-latest",
-      messages: [
-        { role: "system", content: `${SYSTEM_PROMPT}\n\nContext:\n${context}` },
-        { role: "user", content: question },
-      ],
+    const model = new ChatGoogleGenerativeAI({
+      apiKey: process.env.GEMINI_API_KEY,
+      model: "gemini-2.5-flash-lite",
+      temperature: 0,
     });
 
-    const answer = response.choices[0]?.message?.content || "";
+    const response = await model.invoke([
+      { role: "system", content: `${SYSTEM_PROMPT}\n\nContext:\n${context}` },
+      { role: "user", content: question },
+    ]);
+
+    const answer = typeof response.content === "string"
+      ? response.content
+      : JSON.stringify(response.content);
 
     return NextResponse.json({
       answer,
