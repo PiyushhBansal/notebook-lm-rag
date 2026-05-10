@@ -10,7 +10,7 @@ Built with Next.js, LangChain, OpenAI, and Qdrant.
 
 - Upload PDF, plain text, or markdown documents
 - Recursive character chunking with overlap (1000 chars / 200 overlap)
-- OpenAI `text-embedding-3-large` embeddings
+- Jina `jina-embeddings-v3` embeddings (free tier)
 - Qdrant vector store (Cloud or self-hosted)
 - Top-k retrieval (k = 4) → grounded answer via Grok (`grok-2-latest`)
 - "I couldn't find that in the uploaded document." when answer isn't in context
@@ -91,7 +91,7 @@ docker run -p 6333:6333 qdrant/qdrant
 2. Push this repo to GitHub.
 3. Import the repo in Vercel.
 4. Add environment variables in the Vercel project settings:
-   - `OPENAI_API_KEY` (embeddings)
+   - `JINA_API_KEY` (embeddings)
    - `GROK_API_KEY` (chat)
    - `QDRANT_URL`
    - `QDRANT_API_KEY`
@@ -125,7 +125,7 @@ package.json
 | Concern        | Choice                              |
 | -------------- | ----------------------------------- |
 | Framework      | Next.js 14 (App Router)             |
-| Embeddings     | OpenAI `text-embedding-3-large`     |
+| Embeddings     | Jina `jina-embeddings-v3`           |
 | Chat model     | Grok `grok-2-latest` (xAI)          |
 | Vector store   | Qdrant                              |
 | PDF parsing    | `pdf-parse` via LangChain PDFLoader |

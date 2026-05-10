@@ -1,4 +1,4 @@
-import { OpenAIEmbeddings } from "@langchain/openai";
+import { JinaEmbeddings } from "@langchain/community/embeddings/jina";
 import { QdrantVectorStore } from "@langchain/qdrant";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { Document } from "@langchain/core/documents";
@@ -10,7 +10,10 @@ const QDRANT_URL = process.env.QDRANT_URL || "http://localhost:6333";
 const QDRANT_API_KEY = process.env.QDRANT_API_KEY;
 
 export function getEmbeddings() {
-  return new OpenAIEmbeddings({ model: "text-embedding-3-large" });
+  return new JinaEmbeddings({
+    apiKey: process.env.JINA_API_KEY,
+    model: "jina-embeddings-v3",
+  });
 }
 
 function qdrantConfig() {
