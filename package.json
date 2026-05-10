@@ -1,0 +1,31 @@
+{
+  "name": "notebook-lm-rag",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A NotebookLM-style RAG app: upload a PDF or text file and chat with it.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@langchain/community": "^0.3.11",
+    "@langchain/core": "^0.3.18",
+    "@langchain/openai": "^0.3.14",
+    "@langchain/qdrant": "^0.1.1",
+    "@langchain/textsplitters": "^0.1.0",
+    "dotenv": "^16.4.5",
+    "next": "14.2.15",
+    "openai": "^4.68.0",
+    "pdf-parse": "1.1.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "typescript": "^5"
+  }
+}
