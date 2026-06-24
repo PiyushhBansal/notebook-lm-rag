@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
-import { retrieveChunks } from "@/lib/rag";
+import { correctiveRetrieve } from "@/lib/rag";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -20,7 +20,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing question." }, { status: 400 });
     }
 
-    const chunks = await retrieveChunks(question, 4);
+    // Corrective RAG: retrieve -> grade relevance -> rewrite & retry if weak.
+    const crag = await correctiveRetrieve(question, 4);
+    const chunks = crag.chunks;
+
+    // If CRAG found no relevant chunks (even after a rewrite + retry), refuse
+    // rather than feed the model irrelevant context and risk a hallucination.
+    if (!crag.grounded || chunks.length === 0) {
+      return NextResponse.json({
+        answer: "I couldn't find that in the uploaded document.",
+        sources: [],
+        crag: {
+          retrieved: crag.retrieved,
+          relevant: crag.relevant,
+          rewritten: crag.rewritten,
+          rewrittenQuery: crag.rewrittenQuery ?? null,
+        },
+      });
+    }
 
     const context = chunks
       .map((c, i) => {
@@ -51,6 +68,12 @@ export async function POST(req: NextRequest) {
         page: c.metadata?.loc?.pageNumber ?? c.metadata?.page ?? null,
         snippet: c.pageContent.slice(0, 200),
       })),
+      crag: {
+        retrieved: crag.retrieved,
+        relevant: crag.relevant,
+        rewritten: crag.rewritten,
+        rewrittenQuery: crag.rewrittenQuery ?? null,
+      },
     });
   } catch (err: any) {
     console.error("Chat error:", err);

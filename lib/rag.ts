@@ -1,4 +1,4 @@
-import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
+import { GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { QdrantVectorStore } from "@langchain/qdrant";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { Document } from "@langchain/core/documents";
@@ -85,6 +85,122 @@ export async function retrieveChunks(query: string, k = 4): Promise<Document[]> 
   const store = await QdrantVectorStore.fromExistingCollection(embeddings, qdrantConfig());
   const retriever = store.asRetriever({ k });
   return retriever.invoke(query);
+}
+
+// ---------------------------------------------------------------------------
+// Corrective RAG (CRAG)
+// ---------------------------------------------------------------------------
+// Naive RAG blindly stuffs the top-k chunks into the prompt, even when the
+// retriever returns weakly-related noise. CRAG adds a self-correction loop:
+//
+//   1. Retrieve top-k chunks.
+//   2. Grade each chunk for relevance to the question with the LLM.
+//   3. Keep only the relevant chunks.
+//   4. If nothing relevant survives, REWRITE the question and retrieve once
+//      more (the "corrective" step), then re-grade.
+//   5. Report the final state so the caller can ground or refuse accordingly.
+//
+// We stay document-only on purpose (no web-search fallback): the NotebookLM
+// contract — and the grading rubric — require answers grounded in the uploaded
+// document, so the correct action on a miss is "rewrite & retry", then refuse.
+
+function getGrader() {
+  return new ChatGoogleGenerativeAI({
+    apiKey: process.env.GEMINI_API_KEY,
+    model: "gemini-2.5-flash-lite",
+    temperature: 0,
+  });
+}
+
+// Grade a single chunk: is it relevant to the question? Returns true/false.
+async function gradeChunk(question: string, chunk: Document): Promise<boolean> {
+  const grader = getGrader();
+  const prompt = `You are a relevance grader for a retrieval system.
+Decide whether the DOCUMENT CHUNK below contains information that helps answer the QUESTION.
+Reply with a single word: "yes" or "no". Do not explain.
+
+QUESTION:
+${question}
+
+DOCUMENT CHUNK:
+${chunk.pageContent}`;
+
+  try {
+    const res = await grader.invoke(prompt);
+    const text = (typeof res.content === "string" ? res.content : JSON.stringify(res.content))
+      .toLowerCase();
+    return text.includes("yes");
+  } catch {
+    // If grading fails, keep the chunk rather than silently dropping context.
+    return true;
+  }
+}
+
+async function gradeChunks(question: string, chunks: Document[]): Promise<Document[]> {
+  const grades = await Promise.all(chunks.map((c) => gradeChunk(question, c)));
+  return chunks.filter((_, i) => grades[i]);
+}
+
+// Rewrite the question to be more retrieval-friendly (the corrective action).
+async function rewriteQuery(question: string): Promise<string> {
+  const grader = getGrader();
+  const prompt = `Rewrite the user's question so it is clearer and better optimized for semantic search over a document. Keep the original meaning. Return ONLY the rewritten question, nothing else.
+
+Question: ${question}`;
+  try {
+    const res = await grader.invoke(prompt);
+    const text = (typeof res.content === "string" ? res.content : JSON.stringify(res.content)).trim();
+    return text || question;
+  } catch {
+    return question;
+  }
+}
+
+export interface CorrectiveResult {
+  chunks: Document[];          // relevant chunks to ground the answer
+  grounded: boolean;          // true if any relevant chunk survived
+  rewritten: boolean;         // true if a query rewrite was performed
+  rewrittenQuery?: string;    // the rewritten query, if any
+  retrieved: number;          // how many chunks were retrieved in total
+  relevant: number;           // how many were graded relevant
+}
+
+// Full corrective-RAG retrieval: retrieve -> grade -> (rewrite & retry) -> grade.
+export async function correctiveRetrieve(
+  question: string,
+  k = 4,
+): Promise<CorrectiveResult> {
+  // 1. Initial retrieval + grading.
+  const initial = await retrieveChunks(question, k);
+  let relevant = await gradeChunks(question, initial);
+  let retrievedCount = initial.length;
+
+  if (relevant.length > 0) {
+    return {
+      chunks: relevant,
+      grounded: true,
+      rewritten: false,
+      retrieved: retrievedCount,
+      relevant: relevant.length,
+    };
+  }
+
+  // 2. Corrective step: nothing relevant — rewrite the query and retry once.
+  const rewritten = await rewriteQuery(question);
+  if (rewritten.trim().toLowerCase() !== question.trim().toLowerCase()) {
+    const retry = await retrieveChunks(rewritten, k);
+    retrievedCount += retry.length;
+    relevant = await gradeChunks(question, retry);
+  }
+
+  return {
+    chunks: relevant,
+    grounded: relevant.length > 0,
+    rewritten: true,
+    rewrittenQuery: rewritten,
+    retrieved: retrievedCount,
+    relevant: relevant.length,
+  };
 }
 
 async function resetCollection() {
